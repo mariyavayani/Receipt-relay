@@ -66,7 +66,7 @@ if uploaded:
                 if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                     st.warning("The free AI limit is used up for today. The table below shows results from our test run.")
                 else:
-                    st.error("Could not read that receipt. Try a clearer, well-lit photo.")
+                    st.error(f"Could not read that receipt: {str(e)[:300]}")
 
 st.header("Results from our test run")
 st.caption(
