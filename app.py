@@ -31,15 +31,43 @@ SAMPLE = pd.DataFrame(
 )
 
 
+FALLBACK_MODELS = ["gemini-3.8-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
+
+
+class QuotaError(Exception):
+    pass
+
+
 def read_receipt(image_bytes, mime_type):
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-    model = st.secrets.get("GEMINI_MODEL", "gemini-2.5-flash")
-    response = client.models.generate_content(
-        model=model,
-        contents=[types.Part.from_bytes(data=image_bytes, mime_type=mime_type), PROMPT],
-    )
-    text = response.text.replace("```json", "").replace("```", "").strip()
-    return json.loads(text)
+    preferred = st.secrets.get("GEMINI_MODEL", FALLBACK_MODELS[0])
+    models = [preferred] + [m for m in FALLBACK_MODELS if m != preferred]
+    saw_quota = False
+    last_error = None
+    for model in models:
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=[types.Part.from_bytes(data=image_bytes, mime_type=mime_type), PROMPT],
+            )
+            text = response.text.replace("```json", "").replace("```", "").strip()
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            raise ValueError("unreadable") from e
+        except Exception as e:  # try the next model
+            last_error = e
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                saw_quota = True
+    if saw_quota:
+        raise QuotaError()
+    raise last_error
+
+
+def show_details(data):
+    for label, key in [("Vendor", "vendor"), ("Date", "date"), ("Total", "total"),
+                       ("Tax", "tax"), ("Currency", "currency"), ("Category", "category")]:
+        value = data.get(key)
+        st.write(f"**{label}:** {value if value not in (None, '') else 'not on receipt'}")
 
 
 st.title("ReceiptRelay")
@@ -50,23 +78,48 @@ st.write(
 
 uploaded = st.file_uploader("Choose a receipt photo", type=["jpg", "jpeg", "png"])
 
+if "results" not in st.session_state:
+    st.session_state.results = {}
+
 if uploaded:
+    key = f"{uploaded.name}-{uploaded.size}"
     left, right = st.columns(2)
     left.image(uploaded, caption="Your receipt")
     with right:
-        with st.spinner("Reading your receipt..."):
-            try:
-                data = read_receipt(uploaded.getvalue(), uploaded.type)
-                st.subheader("Extracted details")
-                for label, key in [("Vendor", "vendor"), ("Date", "date"), ("Total", "total"),
-                                   ("Tax", "tax"), ("Currency", "currency"), ("Category", "category")]:
-                    value = data.get(key)
-                    st.write(f"**{label}:** {value if value not in (None, '') else 'not on receipt'}")
-            except Exception as e:
-                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                    st.warning("The free AI limit is used up for today. The table below shows results from our test run.")
-                else:
-                    st.error(f"Could not read that receipt: {str(e)[:300]}")
+        st.subheader("Extracted details")
+        # Only call the AI once per photo, so reruns do not waste the free quota
+        if key not in st.session_state.results:
+            with st.spinner("Reading your receipt..."):
+                try:
+                    data = read_receipt(uploaded.getvalue(), uploaded.type)
+                    data["file"] = uploaded.name
+                    st.session_state.results[key] = data
+                except QuotaError:
+                    st.warning("The free AI limit is used up for now. Pick a saved example below to see what the app produces, or try again later.")
+                except ValueError:
+                    st.error("The AI could not find receipt details in that photo. Try a clearer, well-lit photo of the whole receipt.")
+                except Exception as e:
+                    st.error("Something went wrong on our side. Pick a saved example below, or try again in a minute.")
+                    with st.expander("Technical details"):
+                        st.code(str(e)[:400])
+        if key in st.session_state.results:
+            show_details(st.session_state.results[key])
+
+if st.session_state.results:
+    st.subheader("Your receipts this session")
+    columns = ["file", "vendor", "date", "total", "tax", "currency", "category"]
+    table = pd.DataFrame(list(st.session_state.results.values())).reindex(columns=columns)
+    st.dataframe(table, hide_index=True, use_container_width=True)
+    st.download_button("Download as CSV", table.to_csv(index=False).encode("utf-8"),
+                       file_name="expenses.csv", mime="text/csv")
+    st.caption("This table lives in your browser session. Download it before you close the page.")
+
+st.subheader("Or see a saved example")
+choice = st.selectbox("Choose a receipt from our test run", SAMPLE["File"], index=None, placeholder="Select a receipt")
+if choice:
+    row = SAMPLE[SAMPLE["File"] == choice].iloc[0]
+    show_details({"vendor": row["Vendor"], "date": row["Date"], "total": row["Total"],
+                  "tax": row["Tax"], "currency": row["Currency"], "category": row["Category"]})
 
 st.header("Results from our test run")
 st.caption(
