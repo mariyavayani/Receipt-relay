@@ -68,6 +68,12 @@ ReceiptRelay lets anyone upload a receipt photo and get the vendor, date, total,
 
 ReceiptRelay uses Google's Gemini, a pretrained vision-language model, through prompting. We did not train or fine-tune any model. The user uploads a receipt photo, the app sends it to Gemini with an instruction asking for JSON only (vendor, date, total, tax, currency, category), and the app parses the reply, shows it on screen, and adds it to a table. Because the model reads the image directly, no separate OCR step is needed.
 
+**Implementation**
+- `app.py`: the Streamlit app. It uploads the photo, calls Gemini, parses the JSON reply, and builds the results table and CSV download.
+- `requirements.txt`: the Python libraries to install (`streamlit`, `google-genai`).
+- `make_csv.py`: an optional script that processes a whole folder of receipts into `expenses.csv`.
+- The API key is read from Streamlit Secrets and never stored in the code.
+
 **Pipeline:** upload photo, send image and instruction to Gemini, receive JSON, clean and parse it, display and export.
 
 **Prompt design.** The prompt is the core of the method, and every rule in it came from a failure we found in testing:
@@ -88,11 +94,13 @@ ReceiptRelay uses Google's Gemini, a pretrained vision-language model, through p
 
 ## Screenshots
 
+https://drive.google.com/drive/folders/1FcDVCyS1TI7chtUyig37GQmUlKQlxcYN?usp=sharing
+
+
 | Live app reading a receipt | Results table and CSV download |
 |---|---|
 | ![App reading a receipt](screenshots/app-result.png) | ![Spreadsheet output](screenshots/spreadsheet.png) |
 
-*Add your screenshots to a `screenshots/` folder in the repository and update the file names above to match.*
 
 ## Limitations
 
@@ -115,6 +123,3 @@ ReceiptRelay uses Google's Gemini, a pretrained vision-language model, through p
 |---|---|---|
 | Mariya Vayani | Solo developer | Project idea and scope, prompt design and testing on real receipts, Python and Streamlit app, deployment on Streamlit Community Cloud, documentation |
 
-## License
-
-Add a license of your choice, for example MIT, or remove this section.
