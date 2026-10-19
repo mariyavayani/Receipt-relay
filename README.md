@@ -96,12 +96,6 @@ ReceiptRelay uses Google's Gemini, a pretrained vision-language model, through p
 
 https://drive.google.com/drive/folders/1FcDVCyS1TI7chtUyig37GQmUlKQlxcYN?usp=sharing
 
-
-| Live app reading a receipt | Results table and CSV download |
-|---|---|
-| ![App reading a receipt](screenshots/app-result.png) | ![Spreadsheet output](screenshots/spreadsheet.png) |
-
-
 ## Limitations
 
 - The model can misread blurry, cut-off, or handwritten receipts, so important entries should be checked before use for accounting or tax.
